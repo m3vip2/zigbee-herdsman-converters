@@ -61,6 +61,34 @@ const fzLocal = {
             },
         };
     },
+
+    // This is needed during pairing to calibrate the curtain motor.
+    // The switch will push the buttons sequentially until it reaches both ends to know motor start and end points.
+    // If not configured, percentage movement won't work and just open,close,stop commands will work.
+    curtain_calibration: (): Fz.Converter<"genPowerCfg"> => {
+        return {
+            cluster: "genPowerCfg",
+            type: ["raw"],
+            convert: (model, msg, publish, options, meta) => {
+                if (msg.data[0] === 0x7c && msg.data[1] === 0xd2) {
+                    const endpoint = msg.device.getEndpoint(6);
+                    const cmdOptions = {
+                        manufacturerCode: 0x1ad2,
+                        disableDefaultResponse: true,
+                        disableResponse: true,
+                        reservedBits: 3,
+                        direction: 1,
+                        srcEndpoint: 8,
+                    };
+                    const payload = {2050: {value: [msg.data[5], msg.data[6], 0, 0, 0, 0, 0, 0], type: 1}};
+                    endpoint
+                        .readResponse("genPowerCfg", 0xe9, payload, cmdOptions)
+                        .catch((error) => logger.error(`Failed to send curtain calibration for '${msg.device.ieeeAddr}' (${error})`, NS));
+                    logger.debug(`Curtain switch calibration response sent for '${msg.device.ieeeAddr}'`, NS);
+                }
+            },
+        };
+    },
 };
 
 export const definitions: DefinitionWithExtend[] = [
@@ -116,15 +144,23 @@ export const definitions: DefinitionWithExtend[] = [
     {
         zigbeeModel: ["TI0001-curtain-switch"],
         model: "TI0001-curtain-switch",
-        description: "Zigbee curtain switch (can only read status, control does not work yet)",
+        description: "Zigbee curtain switch",
         vendor: "Livolo",
-        fromZigbee: [fz.livolo_curtain_switch_state],
-        toZigbee: [tz.livolo_socket_switch_on_off],
-        // toZigbee: [tz.livolo_curtain_switch_on_off],
-        exposes: [e.switch().withEndpoint("left"), e.switch().withEndpoint("right")],
-        endpoint: (device) => {
-            return {left: 6, right: 6};
-        },
+        fromZigbee: [
+            fz.livolo_curtain_switch_state,
+            fz.command_off,
+            fzLocal.prevent_disconnect({
+                dp: 0x01,
+                payload: {8194: {value: 0n, type: 0x0e}},
+            }),
+            fzLocal.curtain_calibration(),
+        ],
+        toZigbee: [tz.livolo_curtain_switch_state, tz.livolo_curtain_switch_position],
+        exposes: [
+            e.cover_position().setAccess("position", ea.STATE_SET),
+            e.enum("motor_state", ea.STATE, ["OPENING", "CLOSING", "STOPPED", "UNKNOWN"]).withDescription("The current state of the motor."),
+            e.moving(),
+        ],
         extend: [mLocal.poll()],
     },
     {

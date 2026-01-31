@@ -2462,6 +2462,69 @@ export const livolo_cover_options: Tz.Converter = {
         }
     },
 };
+export const livolo_curtain_switch_state: Tz.Converter = {
+    key: ["state"],
+    convertSet: async (entity, key, value, meta) => {
+        utils.assertEndpoint(entity);
+        utils.assertString(value, key);
+        let payload: KeyValueAny;
+        const options = {
+            manufacturerCode: 0x1ad2,
+            disableDefaultResponse: true,
+            disableResponse: true,
+            reservedBits: 3,
+            direction: 1,
+            transactionSequenceNumber: 0xe9,
+            writeUndiv: true,
+        };
+        switch (value.toUpperCase()) {
+            case "OPEN":
+                payload = {1281: {value: [0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], type: 1}};
+                break;
+            case "STOP":
+                payload = {1281: {value: [0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], type: 1}};
+                break;
+            case "CLOSE":
+                payload = {1281: {value: [0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], type: 1}};
+                break;
+            default:
+                throw new Error(`Value '${value}' is not a valid cover state (must be one of 'OPEN', 'CLOSE' or 'STOP')`);
+        }
+        await entity.write("genPowerCfg", payload, options);
+        return {
+            state: {
+                moving: true,
+            },
+            readAfterWriteTime: 250,
+        };
+    },
+};
+export const livolo_curtain_switch_position: Tz.Converter = {
+    key: ["position"],
+    convertSet: async (entity, key, value, meta) => {
+        utils.assertEndpoint(entity);
+        utils.assertNumber(value, key);
+        const position = 100 - value;
+        await entity.command("genOnOff", "toggle", {}, {transactionSequenceNumber: 0});
+        const payload = {1025: {value: [position, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], type: 1}};
+        await entity.write("genPowerCfg", payload, {
+            manufacturerCode: 0x1ad2,
+            disableDefaultResponse: true,
+            disableResponse: true,
+            reservedBits: 3,
+            direction: 1,
+            transactionSequenceNumber: 0xe9,
+            writeUndiv: true,
+        });
+        return {
+            state: {
+                position: value,
+                moving: true,
+            },
+            readAfterWriteTime: 250,
+        };
+    },
+};
 // biome-ignore lint/style/useNamingConvention: ignored using `--suppress`
 export const ZigUP_lock: Tz.Converter = {
     key: ["led"],

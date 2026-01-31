@@ -2496,14 +2496,53 @@ export const livolo_curtain_switch_state: Fz.Converter<"genPowerCfg", undefined,
     cluster: "genPowerCfg",
     type: ["raw"],
     convert: (model, msg, publish, options, meta) => {
-        const stateHeader = Buffer.from([122, 209]);
-        if (msg.data.indexOf(stateHeader) === 0) {
-            if (msg.data[10] === 5 || msg.data[10] === 2) {
-                const status = msg.data[14];
-                return {
-                    state_left: status === 1 ? "ON" : "OFF",
-                    state_right: status === 0 ? "ON" : "OFF",
-                };
+        const dp = msg.data[12];
+        if (msg.data[0] === 0x7a && msg.data[1] === 0xd1) {
+            switch (dp) {
+                case 0x04: {
+                    // Position report
+                    const position = 100 - msg.data[14];
+                    return {
+                        ...meta.state,
+                        position,
+                        state: position < 100 ? "OPEN" : "CLOSE",
+                        moving: false,
+                    };
+                }
+                case 0x05: {
+                    // Motor direction report
+                    const motorDirection = msg.data[14];
+                    if (motorDirection === 0x02) {
+                        return {
+                            ...meta.state,
+                            motor_state: "STOPPED",
+                            moving: false,
+                        };
+                    }
+                    if (motorDirection === 0x01) {
+                        return {
+                            ...meta.state,
+                            motor_state: "CLOSING",
+                            moving: true,
+                        };
+                    }
+                    if (motorDirection === 0x00) {
+                        return {
+                            ...meta.state,
+                            motor_state: "OPENING",
+                            moving: true,
+                        };
+                    }
+                    return {
+                        ...meta.state,
+                        motor_state: "UNKNOWN",
+                        moving: false,
+                    };
+                }
+                default:
+                    // Unknown dps
+                    logger.debug(`Unhandled DP ${dp} for ${meta.device.manufacturerName}: ${msg.data.toString("hex")}`, NS);
+                    break;
             }
         }
     },
