@@ -149,11 +149,11 @@ export const definitions: DefinitionWithExtend[] = [
         fromZigbee: [
             fz.livolo_curtain_switch_state,
             fz.command_off,
+            fzLocal.curtain_calibration(),
             fzLocal.prevent_disconnect({
                 dp: 0x01,
                 payload: {8194: {value: 0n, type: 0x0e}},
             }),
-            fzLocal.curtain_calibration(),
         ],
         toZigbee: [tz.livolo_curtain_switch_state, tz.livolo_curtain_switch_position],
         exposes: [
